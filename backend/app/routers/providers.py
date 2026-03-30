@@ -55,6 +55,8 @@ def _build_provider_out(provider: ProviderProfile, db: Session, distance_miles: 
         "avg_rating": _avg_rating(db, provider.id),
         "review_count": _review_count(db, provider.id),
         "distance_miles": distance_miles,
+        "certifications": provider.certifications,
+        "availability": provider.availability,
     }
 
 
@@ -72,12 +74,13 @@ def apply_as_provider(
 
     profile = ProviderProfile(
         user_id=current_user.id,
-        provider_type=payload.provider_type,
-        bio=payload.bio,
-        years_experience=payload.years_experience,
-        hourly_rate=payload.hourly_rate,
-        service_area_radius_miles=payload.service_area_radius_miles,
         status=ProviderStatus.pending,
+        **{
+            k: v for k, v in payload.model_dump(
+                exclude={"certifications", "availability"}
+            ).items()
+            if v is not None
+        },
     )
     db.add(profile)
     db.flush()
@@ -230,7 +233,15 @@ def update_my_profile(
     if not profile:
         raise HTTPException(status_code=404, detail="Provider profile not found")
 
-    for field, value in payload.model_dump(exclude_none=True).items():
+    updates = payload.model_dump(exclude_none=True)
+
+    # If ID document changes after approval, require re-review
+    id_fields = {"id_document_data", "id_document_type"}
+    if id_fields & updates.keys() and profile.status == ProviderStatus.approved:
+        profile.status = ProviderStatus.pending
+        profile.id_verified = False
+
+    for field, value in updates.items():
         setattr(profile, field, value)
     db.commit()
     db.refresh(profile)
@@ -274,14 +285,44 @@ def get_provider_availability(
         confirmed = db.query(Arrangement).filter(
             Arrangement.provider_id == provider_id,
             Arrangement.status == ArrangementStatus.confirmed,
-            Arrangement.start_date <= target_date,
-            or_(Arrangement.end_date == None, Arrangement.end_date >= target_date),
+            or_(
+                # Non-recurring: only blocks the exact start_date
+                and_(
+                    Arrangement.recurring == False,
+                    Arrangement.start_date == target_date,
+                ),
+                # Recurring with no end: blocks all matching days indefinitely
+                and_(
+                    Arrangement.recurring == True,
+                    Arrangement.start_date <= target_date,
+                    or_(Arrangement.end_date == None, Arrangement.end_date >= target_date),
+                ),
+                # Recurring with end date
+                and_(
+                    Arrangement.recurring == True,
+                    Arrangement.start_date <= target_date,
+                    Arrangement.end_date >= target_date,
+                ),
+            ),
         ).all()
+
+        from datetime import datetime, timedelta
+
+        def to_minutes(t):
+            return t.hour * 60 + t.minute
+
+        def overlaps(slot_start, slot_end, block_start, block_end):
+            """Check time overlap, handling overnight slots (end < start crosses midnight)."""
+            s0 = to_minutes(slot_start)
+            s1 = to_minutes(slot_end) if slot_end > slot_start else to_minutes(slot_end) + 1440
+            b0 = to_minutes(block_start)
+            b1 = to_minutes(block_end) if block_end > block_start else to_minutes(block_end) + 1440
+            return s0 < b1 and s1 > b0
 
         blocked_times = [(a.start_time, a.end_time) for a in confirmed]
         avail = [
             a for a in avail
-            if not any(a.start_time < bt[1] and a.end_time > bt[0] for bt in blocked_times)
+            if not any(overlaps(a.start_time, a.end_time, bt[0], bt[1]) for bt in blocked_times)
         ]
 
     return avail

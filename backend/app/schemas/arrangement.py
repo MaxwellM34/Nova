@@ -49,7 +49,15 @@ class ArrangementOut(BaseModel):
     rate_agreed: float
     payment_method: PaymentMethod
     notes: Optional[str]
+    stripe_payment_intent_id: Optional[str] = None
+    has_review: bool = False
     created_at: datetime
     updated_at: datetime
 
     model_config = {"from_attributes": True}
+
+    @classmethod
+    def from_orm_with_review(cls, obj):
+        data = cls.model_validate(obj)
+        data.has_review = obj.review is not None
+        return data

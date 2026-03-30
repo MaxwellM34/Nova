@@ -1,5 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
+import { BrowserRouter, useNavigate } from "react-router-dom";
 import { ClerkProvider } from "@clerk/clerk-react";
 import App from "./App";
 import "./index.css";
@@ -10,10 +11,24 @@ if (!PUBLISHABLE_KEY) {
   console.warn("Missing VITE_CLERK_PUBLISHABLE_KEY — auth will not work");
 }
 
-ReactDOM.createRoot(document.getElementById("root")).render(
-  <React.StrictMode>
-    <ClerkProvider publishableKey={PUBLISHABLE_KEY || "pk_test_placeholder"}>
+function RootLayout() {
+  const navigate = useNavigate();
+
+  return (
+    <ClerkProvider
+      publishableKey={PUBLISHABLE_KEY || "pk_test_placeholder"}
+      routerPush={(to) => navigate(to)}
+      routerReplace={(to) => navigate(to, { replace: true })}
+    >
       <App />
     </ClerkProvider>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <RootLayout />
+    </BrowserRouter>
   </React.StrictMode>
 );

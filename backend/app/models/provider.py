@@ -40,6 +40,26 @@ class ProviderProfile(Base):
     is_boosted: Mapped[bool] = mapped_column(Boolean, default=False)
     stripe_connect_account_id: Mapped[str | None] = mapped_column(String(255))
     rejection_reason: Mapped[str | None] = mapped_column(Text)
+
+    # Personal & safety fields
+    phone_number: Mapped[str | None] = mapped_column(String(30))
+    date_of_birth: Mapped[date | None] = mapped_column(Date)
+    languages_spoken: Mapped[str | None] = mapped_column(String(255))
+    has_own_transport: Mapped[bool | None] = mapped_column(Boolean)
+    special_needs_experience: Mapped[bool | None] = mapped_column(Boolean)
+    references_available: Mapped[bool | None] = mapped_column(Boolean)
+
+    # Emergency contact
+    emergency_contact_name: Mapped[str | None] = mapped_column(String(255))
+    emergency_contact_phone: Mapped[str | None] = mapped_column(String(30))
+    emergency_contact_relationship: Mapped[str | None] = mapped_column(String(100))
+
+    # Identity verification
+    id_document_type: Mapped[str | None] = mapped_column(String(50))
+    id_document_data: Mapped[str | None] = mapped_column(Text)  # base64 data URL
+    id_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    background_check_consent: Mapped[bool] = mapped_column(Boolean, default=False)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

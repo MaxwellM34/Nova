@@ -1,6 +1,6 @@
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useRef, useState } from "react";
 import { useAuth, useUser } from "@clerk/clerk-react";
-import { setAuthToken, usersApi } from "../api/client";
+import { api, usersApi } from "../api/client";
 
 const AuthContext = createContext(null);
 
@@ -9,11 +9,31 @@ export function AuthProvider({ children }) {
   const { user: clerkUser } = useUser();
   const [dbUser, setDbUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const interceptorRef = useRef(null);
+
+  // Attach interceptor: always fetch a fresh Clerk token before each request
+  useEffect(() => {
+    if (interceptorRef.current !== null) {
+      api.interceptors.request.eject(interceptorRef.current);
+    }
+    interceptorRef.current = api.interceptors.request.use(async (config) => {
+      if (isSignedIn) {
+        const token = await getToken();
+        if (token) config.headers.Authorization = `Bearer ${token}`;
+      } else {
+        delete config.headers.Authorization;
+      }
+      return config;
+    });
+    return () => {
+      api.interceptors.request.eject(interceptorRef.current);
+      interceptorRef.current = null;
+    };
+  }, [isSignedIn, getToken]);
 
   useEffect(() => {
     if (!isLoaded) return;
     if (!isSignedIn) {
-      setAuthToken(null);
       setDbUser(null);
       setLoading(false);
       return;
@@ -21,28 +41,15 @@ export function AuthProvider({ children }) {
 
     (async () => {
       try {
-        const token = await getToken();
-        setAuthToken(token);
         const res = await usersApi.getMe();
         setDbUser(res.data);
       } catch {
-        // User may not yet be synced from Clerk webhook
         setDbUser(null);
       } finally {
         setLoading(false);
       }
     })();
   }, [isSignedIn, isLoaded, clerkUser]);
-
-  // Refresh token before expiry
-  useEffect(() => {
-    if (!isSignedIn) return;
-    const interval = setInterval(async () => {
-      const token = await getToken();
-      setAuthToken(token);
-    }, 50 * 60 * 1000); // refresh every 50 min
-    return () => clearInterval(interval);
-  }, [isSignedIn]);
 
   return (
     <AuthContext.Provider value={{ dbUser, setDbUser, loading, isSignedIn, clerkUser }}>

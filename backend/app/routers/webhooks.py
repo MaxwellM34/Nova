@@ -19,10 +19,13 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
     payload = await request.body()
     headers = dict(request.headers)
 
+    if not settings.CLERK_WEBHOOK_SECRET:
+        raise HTTPException(status_code=400, detail="Webhook secret not configured")
+
     try:
         wh = Webhook(settings.CLERK_WEBHOOK_SECRET)
         event = wh.verify(payload, headers)
-    except WebhookVerificationError:
+    except (WebhookVerificationError, ValueError, RuntimeError):
         raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     event_type = event.get("type")
@@ -33,8 +36,11 @@ async def clerk_webhook(request: Request, db: Session = Depends(get_db)):
         email = (data.get("email_addresses") or [{}])[0].get("email_address", "")
         first_name = data.get("first_name")
         last_name = data.get("last_name")
-        # Role comes from public_metadata set during sign-up flow
-        role_str = (data.get("public_metadata") or {}).get("role", "family")
+        # Role is set via unsafeMetadata on the sign-up form; fall back to public_metadata
+        role_str = (
+            (data.get("unsafe_metadata") or {}).get("role")
+            or (data.get("public_metadata") or {}).get("role", "family")
+        )
         role = UserRole(role_str) if role_str in UserRole.__members__.values() else UserRole.family
 
         existing = db.query(User).filter(User.clerk_user_id == clerk_id).first()

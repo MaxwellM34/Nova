@@ -1,20 +1,11 @@
 import axios from "axios";
 
-const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8001";
 
 export const api = axios.create({
   baseURL: API_URL,
   headers: { "Content-Type": "application/json" },
 });
-
-// Attach Clerk session token to every request
-export function setAuthToken(token) {
-  if (token) {
-    api.defaults.headers.common["Authorization"] = `Bearer ${token}`;
-  } else {
-    delete api.defaults.headers.common["Authorization"];
-  }
-}
 
 // --- Providers ---
 export const providersApi = {
@@ -55,14 +46,17 @@ export const arrangementsApi = {
 export const callsApi = {
   schedule: (providerId, data) => api.post(`/providers/${providerId}/schedule-call`, data),
   update: (id, data) => api.put(`/calls/${id}`, data),
+  getMyCalls: () => api.get("/providers/me/calls"),
 };
 
 // --- Admin ---
 export const adminApi = {
   getProviders: (params) => api.get("/admin/providers", { params }),
+  getProvider: (id) => api.get(`/admin/providers/${id}`),
   approveProvider: (id) => api.put(`/admin/providers/${id}/approve`),
   rejectProvider: (id, reason) => api.put(`/admin/providers/${id}/reject`, null, { params: { reason } }),
   boostProvider: (id, boosted) => api.put(`/admin/providers/${id}/boost`, null, { params: { is_boosted: boosted } }),
+  verifyProviderId: (id) => api.put(`/admin/providers/${id}/verify-id`),
   getCertifications: (params) => api.get("/admin/certifications", { params }),
   verifyCert: (id) => api.put(`/admin/certifications/${id}/verify`),
   getUsers: () => api.get("/admin/users"),

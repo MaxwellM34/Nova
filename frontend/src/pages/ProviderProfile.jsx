@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useUser } from "@clerk/clerk-react";
-import { providersApi, callsApi } from "../api/client";
+import { providersApi, callsApi, arrangementsApi } from "../api/client";
 import { useAppAuth } from "../context/AuthContext";
 import StarRating from "../components/ui/StarRating";
 import LoadingSpinner from "../components/ui/LoadingSpinner";
@@ -29,6 +29,17 @@ export default function ProviderProfile() {
   const [callSubmitting, setCallSubmitting] = useState(false);
   const [callSuccess, setCallSuccess] = useState(false);
 
+  const [bookModalOpen, setBookModalOpen] = useState(false);
+  const [bookForm, setBookForm] = useState({
+    start_date: "", start_time: "20:00", end_time: "08:00",
+    duration_hours: "8", service_type: "overnight",
+    rate_agreed: "", payment_method: "platform",
+    recurring: false, notes: "",
+  });
+  const [bookSubmitting, setBookSubmitting] = useState(false);
+  const [bookError, setBookError] = useState(null);
+  const [bookSuccess, setBookSuccess] = useState(false);
+
   useEffect(() => {
     Promise.all([providersApi.getById(id), providersApi.getReviews(id)])
       .then(([pRes, rRes]) => {
@@ -38,6 +49,32 @@ export default function ProviderProfile() {
       .catch(() => navigate("/providers"))
       .finally(() => setLoading(false));
   }, [id]);
+
+  const handleBooking = async (e) => {
+    e.preventDefault();
+    setBookSubmitting(true);
+    setBookError(null);
+    try {
+      await arrangementsApi.create({
+        provider_id: parseInt(id),
+        start_date: bookForm.start_date,
+        start_time: bookForm.start_time,
+        end_time: bookForm.end_time,
+        duration_hours: parseInt(bookForm.duration_hours),
+        service_type: bookForm.service_type,
+        rate_agreed: parseFloat(bookForm.rate_agreed),
+        payment_method: bookForm.payment_method,
+        recurring: bookForm.recurring,
+        notes: bookForm.notes || null,
+      });
+      setBookSuccess(true);
+      setTimeout(() => { setBookModalOpen(false); setBookSuccess(false); }, 2500);
+    } catch (err) {
+      setBookError(err.response?.data?.detail || "Failed to submit request. Please try again.");
+    } finally {
+      setBookSubmitting(false);
+    }
+  };
 
   const handleScheduleCall = async (e) => {
     e.preventDefault();
@@ -118,12 +155,20 @@ export default function ProviderProfile() {
               </div>
 
               {dbUser && dbUser.role === "family" && (
-                <button
-                  className="btn-primary w-full mt-5 text-sm"
-                  onClick={() => setCallModalOpen(true)}
-                >
-                  Schedule intro call
-                </button>
+                <div className="mt-5 space-y-2">
+                  <button
+                    className="btn-primary w-full text-sm"
+                    onClick={() => { setBookModalOpen(true); setBookForm(f => ({ ...f, rate_agreed: String(provider.hourly_rate) })); }}
+                  >
+                    Request booking
+                  </button>
+                  <button
+                    className="btn-ghost w-full text-sm"
+                    onClick={() => setCallModalOpen(true)}
+                  >
+                    Schedule intro call
+                  </button>
+                </div>
               )}
 
               {provider.is_boosted && (

@@ -1,5 +1,5 @@
 import React from "react";
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { SignedIn, SignedOut, RedirectToSignIn } from "@clerk/clerk-react";
 import { AuthProvider } from "./context/AuthContext";
 import Navbar from "./components/layout/Navbar";
@@ -31,9 +31,8 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AuthProvider>
-        <div className="flex flex-col min-h-screen">
+    <AuthProvider>
+      <div className="flex flex-col min-h-screen">
           <Navbar />
           <main className="flex-1">
             <Routes>
@@ -107,7 +106,6 @@ export default function App() {
           </main>
           <Footer />
         </div>
-      </AuthProvider>
-    </BrowserRouter>
+    </AuthProvider>
   );
 }

@@ -28,6 +28,34 @@ def list_providers(
     return q.order_by(ProviderProfile.created_at.desc()).all()
 
 
+@router.get("/providers/{provider_id}")
+def get_provider_detail(
+    provider_id: int,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    from app.routers.providers import _build_provider_out
+    from app.schemas.provider import ProviderProfileOut
+    profile = db.query(ProviderProfile).filter(ProviderProfile.id == provider_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    return ProviderProfileOut(**_build_provider_out(profile, db))
+
+
+@router.put("/providers/{provider_id}/verify-id")
+def verify_provider_id(
+    provider_id: int,
+    _: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    profile = db.query(ProviderProfile).filter(ProviderProfile.id == provider_id).first()
+    if not profile:
+        raise HTTPException(status_code=404, detail="Provider not found")
+    profile.id_verified = True
+    db.commit()
+    return {"id_verified": True}
+
+
 @router.put("/providers/{provider_id}/approve")
 def approve_provider(
     provider_id: int,

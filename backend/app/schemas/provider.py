@@ -61,10 +61,27 @@ class ProviderProfileBase(BaseModel):
     hourly_rate: float
     service_area_radius_miles: int = 25
 
+    # Personal info
+    phone_number: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    languages_spoken: Optional[str] = None
+    has_own_transport: Optional[bool] = None
+    special_needs_experience: Optional[bool] = None
+    references_available: Optional[bool] = None
+
+    # Emergency contact
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+
+    # Identity
+    id_document_type: Optional[str] = None
+    id_document_data: Optional[str] = None
+    background_check_consent: bool = False
+
     @field_validator("hourly_rate")
     @classmethod
     def validate_rate(cls, v, info):
-        # Validate minimum rate per provider type
         provider_type = info.data.get("provider_type")
         if provider_type and provider_type in PROVIDER_MIN_RATES:
             min_rate = PROVIDER_MIN_RATES[provider_type]
@@ -83,6 +100,17 @@ class ProviderProfileUpdate(BaseModel):
     years_experience: Optional[int] = None
     hourly_rate: Optional[float] = None
     service_area_radius_miles: Optional[int] = None
+    phone_number: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    languages_spoken: Optional[str] = None
+    has_own_transport: Optional[bool] = None
+    special_needs_experience: Optional[bool] = None
+    references_available: Optional[bool] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    id_document_type: Optional[str] = None
+    id_document_data: Optional[str] = None
 
 
 class ProviderSummary(BaseModel):
@@ -111,5 +139,20 @@ class ProviderProfileOut(ProviderSummary):
     certifications: List[CertificationOut] = []
     availability: List[AvailabilityOut] = []
     created_at: datetime
+
+    # Personal & safety — included in admin/dashboard views
+    phone_number: Optional[str] = None
+    date_of_birth: Optional[date] = None
+    languages_spoken: Optional[str] = None
+    has_own_transport: Optional[bool] = None
+    special_needs_experience: Optional[bool] = None
+    references_available: Optional[bool] = None
+    emergency_contact_name: Optional[str] = None
+    emergency_contact_phone: Optional[str] = None
+    emergency_contact_relationship: Optional[str] = None
+    id_document_type: Optional[str] = None
+    id_document_data: Optional[str] = None
+    id_verified: bool = False
+    background_check_consent: bool = False
 
     model_config = {"from_attributes": True}

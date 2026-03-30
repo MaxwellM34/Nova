@@ -39,6 +39,29 @@ def create_arrangement(
     if not provider:
         raise HTTPException(status_code=404, detail="Provider not found or not approved")
 
+    # Validate agreed rate is at least provider's hourly rate
+    if payload.rate_agreed < provider.hourly_rate:
+        raise HTTPException(
+            status_code=400,
+            detail=f"rate_agreed must be at least ${provider.hourly_rate}/hr"
+        )
+
+    # Conflict detection: no overlapping confirmed arrangements for this provider on this date
+    conflicts = db.query(Arrangement).filter(
+        Arrangement.provider_id == payload.provider_id,
+        Arrangement.status == ArrangementStatus.confirmed,
+        Arrangement.start_date == payload.start_date,
+    ).all()
+    for c in conflicts:
+        # Check time overlap
+        req_start = payload.start_time
+        req_end = payload.end_time
+        if not (req_end <= c.start_time or req_start >= c.end_time):
+            raise HTTPException(
+                status_code=409,
+                detail="Provider already has a confirmed arrangement at that time"
+            )
+
     arrangement = Arrangement(
         family_id=current_user.id,
         **payload.model_dump(),
@@ -46,7 +69,7 @@ def create_arrangement(
     db.add(arrangement)
     db.commit()
     db.refresh(arrangement)
-    return arrangement
+    return ArrangementOut.from_orm_with_review(arrangement)
 
 
 @router.get("/arrangements/me", response_model=List[ArrangementOut])
@@ -55,7 +78,7 @@ def get_my_arrangements(
     db: Session = Depends(get_db),
 ):
     if current_user.role == UserRole.family:
-        return (
+        rows = (
             db.query(Arrangement)
             .filter(Arrangement.family_id == current_user.id)
             .order_by(Arrangement.start_date.desc())
@@ -65,13 +88,15 @@ def get_my_arrangements(
         profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == current_user.id).first()
         if not profile:
             return []
-        return (
+        rows = (
             db.query(Arrangement)
             .filter(Arrangement.provider_id == profile.id)
             .order_by(Arrangement.start_date.desc())
             .all()
         )
-    return []
+    else:
+        return []
+    return [ArrangementOut.from_orm_with_review(a) for a in rows]
 
 
 @router.get("/arrangements/{arrangement_id}", response_model=ArrangementOut)
@@ -92,7 +117,7 @@ def get_arrangement(
     if not allowed:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    return arrangement
+    return ArrangementOut.from_orm_with_review(arrangement)
 
 
 @router.put("/arrangements/{arrangement_id}", response_model=ArrangementOut)
@@ -120,11 +145,24 @@ def update_arrangement(
 
     if payload.status:
         new_status = payload.status
-        # Business rules for status transitions
-        if new_status == ArrangementStatus.confirmed and not (is_provider or is_admin):
-            raise HTTPException(status_code=403, detail="Only provider can confirm arrangements")
-        if new_status == ArrangementStatus.completed and not (is_provider or is_admin):
-            raise HTTPException(status_code=403, detail="Only provider can mark completed")
+        cur = arrangement.status
+        # Status transition rules
+        if new_status == ArrangementStatus.confirmed:
+            if not (is_provider or is_admin):
+                raise HTTPException(status_code=403, detail="Only provider can confirm arrangements")
+            if cur != ArrangementStatus.pending:
+                raise HTTPException(status_code=400, detail="Only pending arrangements can be confirmed")
+        if new_status == ArrangementStatus.completed:
+            if not (is_provider or is_admin):
+                raise HTTPException(status_code=403, detail="Only provider can mark completed")
+            if cur != ArrangementStatus.confirmed:
+                raise HTTPException(status_code=400, detail="Only confirmed arrangements can be marked completed")
+        if new_status == ArrangementStatus.cancelled:
+            # Family can cancel pending; provider can cancel pending or confirmed; admin can cancel anything
+            if is_family and cur != ArrangementStatus.pending:
+                raise HTTPException(status_code=400, detail="Families can only cancel pending arrangements")
+            if not (is_family or is_provider or is_admin):
+                raise HTTPException(status_code=403, detail="Access denied")
 
         arrangement.status = new_status
 
@@ -136,7 +174,7 @@ def update_arrangement(
 
     db.commit()
     db.refresh(arrangement)
-    return arrangement
+    return ArrangementOut.from_orm_with_review(arrangement)
 
 
 @router.post("/arrangements/{arrangement_id}/review", response_model=ReviewOut, status_code=status.HTTP_201_CREATED)
@@ -219,3 +257,17 @@ def update_call(
     db.commit()
     db.refresh(call)
     return call
+
+
+@router.get("/providers/me/calls", response_model=List[ScheduledCallOut])
+def get_my_calls(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Returns all scheduled intro calls for the current user (family or provider)."""
+    if current_user.role == UserRole.provider:
+        profile = db.query(ProviderProfile).filter(ProviderProfile.user_id == current_user.id).first()
+        if not profile:
+            return []
+        return db.query(ScheduledCall).filter(ScheduledCall.provider_id == profile.id).order_by(ScheduledCall.proposed_datetime.desc()).all()
+    return db.query(ScheduledCall).filter(ScheduledCall.family_id == current_user.id).order_by(ScheduledCall.proposed_datetime.desc()).all()

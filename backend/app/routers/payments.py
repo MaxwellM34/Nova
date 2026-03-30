@@ -106,9 +106,9 @@ def create_subscription(
 ):
     """Create or update a Stripe subscription."""
     PLAN_PRICE_IDS = {
-        PlanType.family_basic: "price_family_basic",
-        PlanType.provider_basic: "price_provider_basic",
-        PlanType.provider_boosted: "price_provider_boosted",
+        PlanType.family_basic: settings.STRIPE_PRICE_FAMILY_BASIC,
+        PlanType.provider_basic: settings.STRIPE_PRICE_PROVIDER_BASIC,
+        PlanType.provider_boosted: settings.STRIPE_PRICE_PROVIDER_BOOSTED,
     }
     price_id = PLAN_PRICE_IDS.get(payload.plan_type)
     if not price_id:
@@ -154,12 +154,14 @@ async def stripe_webhook(
     stripe_signature: Optional[str] = Header(None),
     db: Session = Depends(get_db),
 ):
+    if not settings.STRIPE_WEBHOOK_SECRET:
+        raise HTTPException(status_code=400, detail="Stripe webhook secret not configured")
     payload = await request.body()
     try:
         event = stripe.Webhook.construct_event(
             payload, stripe_signature, settings.STRIPE_WEBHOOK_SECRET
         )
-    except stripe.error.SignatureVerificationError:
+    except Exception:
         raise HTTPException(status_code=400, detail="Invalid Stripe signature")
 
     if event["type"] == "payment_intent.succeeded":
